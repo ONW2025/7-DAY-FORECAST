@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <!-- You can remove or keep the viewport meta tag; for fixed sizing it’s optional -->
+  <meta name="viewport" content="width=1920, height=1080" />
+  <title>Draggable Weather Display – Fixed 1920x1080 with Text Glow</title>
+  <style>
+    /* Force the page to be exactly 1920x1080 */
+    html, body {
+      width: 1920px;
+      height: 1080px;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+      background: #000;
+    }
+    /* Wrap all content (except password overlay) to allow blurring */
+    #mainContent {
+      filter: blur(10px);
+      transition: filter 0.3s ease;
+    }
+    /* Outer container centers the image container */
+    .map-container {
+      width: 1920px;
+      height: 1080px;
+      margin: 0 auto;
+      text-align: center;
+      position: relative;
+    }
+    /* The image container holds the image and positions the overlay relative to it */
+    .img-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: inline-block;
+    }
+    /* The map image now fills the container */
+    .img-container img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    /* The overlay sits exactly on top of the image */
+    .overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none; /* Its children will enable pointer events */
+    }
+    /* UI elements placed inside the overlay */
+    #title-header {
+      position: absolute;
+      top: 8.75%;
+      left: 16.5%;
+      font-family: 'Overpass Black', sans-serif;
+      font-size: 2.5em;
+      color: #fff;
+      text-shadow: 0 0 10px #000, 0 0 10px #000, 0 0 10px #000;
+      cursor: pointer;
+      z-index: 1200;
+      text-transform: uppercase;
+      pointer-events: auto;
+    }
+    /* City dropdown – appears on hover over the header */
+    #city-dropdown {
+      display: none;
+      position: absolute;
+      top: calc(100% + 0px);
+      left: 0;
+      background: rgba(0, 0, 0, 0.8);
+      padding: 5px;
+      border-radius: 4px;
+      width: 600px;
+      z-index: 1100;
+      pointer-events: auto;
+    }
+    #title-header:hover #city-dropdown {
+      display: block;
+    }
+    #city-dropdown ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      -webkit-column-count: 4;
+      column-count: 4;
+    }
+    #city-dropdown li {
+      padding: 8px 12px;
+      border-bottom: 1px solid #444;
+      text-transform: uppercase;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    #city-dropdown li:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+    #timestamp {
+      position: absolute;
+      top: 95%;
+      left: 2%;
+      font-family: 'Overpass Black', sans-serif;
+      font-size: 1.5em;
+      color: #fff;
+      text-shadow: 0 0 5px #000;
+      z-index: 1200;
+      pointer-events: auto;
+    }
+    /* Marker and UI element styles – all use absolute positioning */
+    .locked {
+      position: absolute;
+      background: rgba(255, 255, 255, 0);
+      border: 0;
+      text-align: center;
+      cursor: default;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      white-space: nowrap;
+      line-height: normal;
+      pointer-events: auto;
+    }
+    .temperature:hover {
+      background-color: rgba(255, 255, 255, 0.2);
+    }
+    .icon-box, .weather-box, .text-box {
+      position: absolute;
+      cursor: grab;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+      z-index: 500;
+      pointer-events: auto;
+    }
+    .icon-box {
+      background: rgba(0, 0, 0, 0.05);
+      padding: 5px;
+      width: 120px;
+      height: 140px;
+    }
+    .icon-box select {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      display: none;
+      z-index: 10;
+    }
+    .icon-box:hover select {
+      display: block;
+    }
+    .icon-box img {
+      max-width: 150%;
+      max-height: 150%;
+      object-fit: contain;
+    }
+    .text-box {
+      background: rgba(0, 0, 0, 0.05);
+      padding: 5px;
+      width: 200px;
+      height: 100px;
+    }
+    .text-box select {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      display: none;
+      z-index: 10;
+    }
+    .text-box:hover select {
+      display: block;
+    }
+    .text-box img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+    .weather-box {
+      background: rgba(0, 0, 0, 0.05);
+      padding: 5px;
+      width: 120px;
+      height: 140px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .weather-box select {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      display: none;
+      z-index: 10;
+    }
+    .weather-box:hover select {
+      display: block;
+    }
+    .weather-box img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+    /* Tooltip and image capture overlay */
+    #customTooltip {
+      position: fixed;
+      background: rgba(0, 0, 0, 0.8);
+      color: #fff;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      pointer-events: none;
+      z-index: 10000;
+      display: none;
+    }
+    #imageOverlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 99999;
+    }
+    #imageOverlay img {
+      max-width: 90%;
+      max-height: 90%;
+      border: 5px solid #fff;
+      box-shadow: 0 0 10px #000;
+    }
+    /* -------------------------
+       Password Overlay Styles
+       ------------------------- */
+    #passwordOverlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100000;
+    }
+    #passwordBox {
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      text-align: center;
+      box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    }
+    #passwordBox input {
+      padding: 10px;
+      font-size: 16px;
+      margin-bottom: 10px;
+      width: 200px;
+    }
+    #passwordBox button {
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+</head>
+<body>
+  <!-- Main Content Wrapped for Blurring -->
+  <div id="mainContent">
+    <!-- The outer container centers the image container -->
+    <div class="map-container">
+      <!-- The image container holds the map image and an overlay that will have all the markers/UI -->
+      <div class="img-container" id="imgContainer">
+        <img id="mapImg" src="background.png" alt="Map" />
+        <div class="overlay" id="overlay"></div>
+      </div>
+    </div>
+    <div id="customTooltip"></div>
+    
+    <script>
+      // For clarity, we use the overlay as our "working" container.
+      const container = document.getElementById('overlay');
+
+      // Create UI elements (title header, timestamp) inside the overlay.
+      const titleHeader = document.createElement('div');
+      titleHeader.id = "title-header";
+      titleHeader.innerHTML =
+        '<span id="header-text">Select City</span>' +
+        '<div id="city-dropdown"><ul>' +
+          '<li data-lat="41.0814" data-lon="-81.5190">Akron</li>' +
+          '<li data-lat="41.8650" data-lon="-80.7825">Ashtabula</li>' +
+          '<li data-lat="39.3295" data-lon="-82.1013">Athens</li>' +
+          '<li data-lat="40.3612" data-lon="-83.7597">Bellefontaine</li>' +
+          '<li data-lat="40.7989" data-lon="-81.3784">Canton</li>' +
+          '<li data-lat="40.7302" data-lon="-84.1437">Celina</li>' +
+          '<li data-lat="39.6284" data-lon="-84.1594">Centerville</li>' +
+          '<li data-lat="39.3337" data-lon="-82.9839">Chillicothe</li>' +
+          '<li data-lat="39.6361" data-lon="-82.9939">Circleville</li>' +
+          '<li data-lat="39.1031" data-lon="-84.5120">Cincinnati</li>' +
+          '<li data-lat="41.4993" data-lon="-81.6944">Cleveland</li>' +
+          '<li data-lat="41.3042" data-lon="-82.9752">Clyde</li>' +
+          '<li data-lat="39.9612" data-lon="-82.9988">Columbus</li>' +
+          '<li data-lat="40.2720" data-lon="-81.8596">Coshocton</li>' +
+          '<li data-lat="39.7589" data-lon="-84.1916">Dayton</li>' +
+          '<li data-lat="40.2981" data-lon="-83.0746">Delaware</li>' +
+          '<li data-lat="41.2846" data-lon="-84.3733">Defiance</li>' +
+          '<li data-lat="41.3734" data-lon="-82.1076">Elyria</li>' +
+          '<li data-lat="39.8781" data-lon="-83.9369">Enon</li>' +
+          '<li data-lat="38.8435" data-lon="-82.2053">Gallipolis</li>' +
+          '<li data-lat="38.8645" data-lon="-83.9041">Georgetown</li>' +
+          '<li data-lat="41.0440" data-lon="-83.6498">Findlay</li>' +
+          '<li data-lat="39.1200" data-lon="-84.5300">Jackson</li>' +
+          '<li data-lat="40.0451" data-lon="-82.5252">Lancaster</li>' +
+          '<li data-lat="41.4950" data-lon="-83.9380">Luckey</li>' +
+          '<li data-lat="41.4818" data-lon="-82.1831">Lorain</li>' +
+          '<li data-lat="40.7426" data-lon="-84.1052">Lima</li>' +
+          '<li data-lat="40.3890" data-lon="-83.0667">Logan</li>' +
+          '<li data-lat="40.7584" data-lon="-82.5154">Mansfield</li>' +
+          '<li data-lat="40.5880" data-lon="-83.1283">Marion</li>' +
+          '<li data-lat="39.4154" data-lon="-81.4548">Marietta</li>' +
+          '<li data-lat="40.3932" data-lon="-82.4854">Mt. Vernon</li>' +
+          '<li data-lat="40.0584" data-lon="-82.4013">Newark</li>' +
+          '<li data-lat="41.3895" data-lon="-82.0190">North Ridgeville</li>' +
+          '<li data-lat="38.7157" data-lon="-82.9944">Portsmouth</li>' +
+          '<li data-lat="41.4481" data-lon="-82.7079">Sandusky</li>' +
+          '<li data-lat="40.0803" data-lon="-80.9018">St. Clairsville</li>' +
+          '<li data-lat="41.1000" data-lon="-83.1700">Tiffin</li>' +
+          '<li data-lat="41.3895" data-lon="-82.0190">Toledo</li>' +
+          '<li data-lat="39.5367" data-lon="-83.4238">Washington Court House</li>' +
+          '<li data-lat="39.4453" data-lon="-83.8285">Wilmington</li>' +
+          '<li data-lat="41.0998" data-lon="-80.6495">Youngstown</li>' +
+          '<li data-lat="39.9400" data-lon="-82.0132">Zanesville</li>' +
+        '</ul></div>';
+      container.appendChild(titleHeader);
+
+      const timestampEl = document.createElement('div');
+      timestampEl.id = "timestamp";
+      container.appendChild(timestampEl);
+
+      // Timestamp setup
+      function formatTimestamp() {
+        const now = new Date();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const year = String(now.getFullYear()).slice(-2);
+        let hours = now.getHours();
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12 || 12;
+        const hourStr = String(hours).padStart(2, '0');
+        return `CREATED: ${month}/${day}/${year}: ${hourStr}:${minutes} ${ampm}`;
+      }
+      timestampEl.textContent = formatTimestamp();
+
+      // Right-click capture: capture the entire image container (so the visible image plus overlay)
+      const imgContainerEl = document.getElementById('imgContainer');
+      imgContainerEl.addEventListener('contextmenu', function(e) {
+        e.preventDefault();
+        html2canvas(imgContainerEl, { useCORS: true }).then(function(canvas) {
+          const overlayDiv = document.createElement('div');
+          overlayDiv.id = "imageOverlay";
+          // Clicking outside the image will close the overlay.
+          overlayDiv.addEventListener('click', function() {
+            document.body.removeChild(overlayDiv);
+          });
+          const imgDataUrl = canvas.toDataURL("image/png");
+          const img = document.createElement('img');
+          img.src = imgDataUrl;
+          overlayDiv.appendChild(img);
+          document.body.appendChild(overlayDiv);
+        }).catch(function(error) {
+          console.error("Error capturing container:", error);
+        });
+      });
+
+      // --- Forecast & Icon Mapping ---
+      const customIconMapping = {
+          "areas drizzle": "areas-drizzle.png",
+    "areas drizzle/sleet": "areas-drizzle-sleet.png",
+    "areas flurries": "areas-flurries.png",
+    "areas flurries/drizzle": "areas-flurries-drizzle.png",
+    "areas flurries/rain": "areas-flurries-rain.png",
+    "areas flurries/sprinkles": "areas-flurries-sprinkles.png",
+    "areas fog": "areas-fog.png",
+    "areas frost": "areas-frost.png",
+    "areas freezing drizzle": "areas-freezing-drizzle.png",
+    "areas freezing fog": "areas-freezing-fog.png",
+    "areas freezing rain": "areas-freezing-rain.png",
+    "areas haze": "areas-haze.png",
+    "areas light snow": "areas-light-snow.png",
+    "areas rain": "areas-rain.png",
+    "areas rain/sleet": "areas-rain-sleet.png",
+    "areas showers": "areas-showers.png",
+    "areas smoke": "areas-smoke.png",
+    "areas snow": "areas-snow.png",
+    "areas snow/drizzle": "areas-snow-drizzle.png",
+    "areas snow/rain": "areas-snow-rain.png",
+    "areas snow/sprinkles": "areas-snow-sprinkles.png",
+    "areas sprinkles": "areas-sprinkles.png",
+    "areas sprinkles/sleet": "areas-sprinkles-sleet.png",
+    "areas t-storms": "areas-t-storms.png",
+    "becoming cloudy": "becoming-cloudy.png",
+    "becoming sunny": "becoming-sunny.png",
+    "blowing dust": "blowing-dust.png",
+    "blowing snow": "blowing-snow.png",
+    "blustery": "blustery.png",
+    "breezy": "breezy.png",
+    "chance drizzle": "chance-drizzle.png",
+    "chance flurries": "chance-flurries.png",
+    "chance flurries/drizzle": "chance-flurries-drizzle.png",
+    "chance flurries/rain": "chance-flurries-rain.png",
+    "chance flurries/sprinkles": "chance-flurries-sprinkles.png",
+    "chance freezing drizzle": "chance-freezing-drizzle.png",
+    "chance freezing rain": "chance-freezing-rain.png",
+    "chance light snow": "chance-light-snow.png",
+    "chance rain": "chance-rain.png",
+    "chance rain/sleet": "chance-rain-sleet.png",
+    "chance showers": "chance-showers.png",
+    "chance snow": "chance-snow.png",
+    "chance snow/drizzle": "chance-snow-drizzle.png",
+    "chance snow/rain": "chance-snow-rain.png",
+    "chance snow/sprinkles": "chance-snow-sprinkles.png",
+    "chance sprinkles": "chance-sprinkles.png",
+    "chance t-storms": "chance-t-storms.png",
+    "clear": "clear.png",
+    "clearing": "clearing.png",
+    "clearing late": "clearing-late.png",
+    "cold": "cold.png",
+    "decreasing clouds": "decreasing-clouds.png",
+    "dense fog": "dense-fog.png",
+    "dense freezing fog": "dense-freezing-fog.png",
+    "drizzle": "drizzle.png",
+    "drizzle likely": "drizzle-likely.png",
+    "drizzle/sleet": "drizzle/sleet.png",
+    "drizzle/sleet likely": "drizzle/sleet-likely.png",
+    "flurries": "flurries.png",
+    "flurries likely": "flurries-likely.png",
+    "flurries/drizzle": "flurries/drizzle.png",
+    "flurries/drizzle likely": "flurries/drizzle-likely.png",
+    "flurries/rain": "flurries-rain.png",
+    "flurries/rain likely": "flurries-rain-likely.png",
+    "flurries/sprinkles": "flurries-sprinkles.png",
+    "flurries/sprinkles likely": "flurries-sprinkles-likely.png",
+    "gradual clearing": "gradual-clearing.png",
+    "heavy rain": "heavy-rain.png",
+    "heavy snow": "heavy-snow.png",
+    "hot": "hot.png",
+    "haze": "haze.png",
+    "increasing clouds": "increasing-clouds.png",
+    "isolated drizzle": "isolated-drizzle.png",
+    "isolated fog": "isolated-fog.png",
+    "isolated freezing fog": "isolated-freezing-fog.png",
+    "isolated frost": "isolated-frost.png",
+    "isolated haze": "isolated-haze.png",
+    "isolated rain": "isolated-rain.png",
+    "isolated showers": "isolated-showers.png",
+    "isolated smoke": "isolated-smoke.png",
+    "isolated sprinkles": "isolated-sprinkles.png",
+    "isolated t-storms": "isolated-t-storms.png",
+    "light snow": "light-snow.png",
+    "light snow likely": "light-snow-likely.png",
+    "mostly clear": "mostly-clear.png",
+    "mostly cloudy": "mostly-cloudy.png",
+    "mostly sunny": "mostly-sunny.png",
+    "morning frost": "morning-frost.png",
+    "patchy fog": "patchy-fog.png",
+    "patchy freezing fog": "patchy-freezing-fog.png",
+    "patchy frost": "patchy-frost.png",
+    "patchy haze": "patchy-haze.png",
+    "patchy smoke": "patchy-smoke.png",
+    "partly cloudy": "partly-cloudy.png",
+    "partly sunny": "partly-sunny.png",
+    "rain": "rain.png",
+    "rain likely": "rain-likely.png",
+    "rain/sleet": "rain-sleet.png",
+    "rain/sleet likely": "rain-sleet-likely.png",
+    "showers": "showers.png",
+    "showers likely": "showers-likely.png",
+    "smoke": "smoke.png",
+    "snow": "snow.png",
+    "snow likely": "snow-likely.png",
+    "snow/drizzle": "snow-drizzle.png",
+    "snow/drizzle likely": "snow-drizzle-likely.png",
+    "snow/rain": "snow-rain.png",
+    "snow/rain likely": "snow-rain-likely.png",
+    "snow/sprinkles": "snow-sprinkles.png",
+    "snow/sprinkles likely": "snow-sprinkles-likely.png",
+    "sleet": "sleet.png",
+    "slight chance drizzle": "slight-chance-drizzle.png",
+    "slight chance drizzle/sleet": "slight-chance-drizzle-sleet.png",
+    "slight chance flurries": "slight-chance-flurries.png",
+    "slight chance flurries/drizzle": "slight-chance-flurries-drizzle.png",
+    "slight chance flurries/rain": "slight-chance-flurries-rain.png",
+    "slight chance flurries/sprinkles": "slight-chance-flurries-sprinkles.png",
+    "slight chance freezing drizzle": "slight-chance-freezing-drizzle.png",
+    "slight chance freezing rain": "slight-chance-freezing-rain.png",
+    "slight chance light snow": "slight-chance-light-snow.png",
+    "slight chance rain": "slight-chance-rain.png",
+    "slight chance rain/sleet": "slight-chance-rain-sleet.png",
+    "slight chance showers": "slight-chance-showers.png",
+    "slight chance snow": "slight-chance-snow.png",
+    "slight chance snow/drizzle": "slight-chance-snow-drizzle.png",
+    "slight chance snow/rain": "slight-chance-snow-rain.png",
+    "slight chance snow/sprinkles": "slight-chance-snow-sprinkles.png",
+    "slight chance sprinkles": "slight-chance-sprinkles.png",
+    "slight chance sprinkles/sleet": "slight-chance-sprinkles-sleet.png",
+    "slight chance t-storms": "slight-chance-t-storms.png",
+    "sprinkles": "sprinkles.png",
+    "sprinkles likely": "sprinkles-likely.png",
+    "sprinkles/sleet": "sprinkles/sleet.png",
+    "sprinkles/sleet likely": "sprinkles/sleet-likely.png",
+    "sunny": "sunny.png",
+    "t-storms": "t-storms.png",
+    "t-storms likely": "t-storms-likely.png",
+    "very windy": "very-windy.png",
+    "windy": "windy.png",
+    "wintry mix": "wintry-mix.png"
+      };
+
+      window.updateWeatherIcon = function(forecastPeriod, iconElementId) {
+        if (!forecastPeriod || !forecastPeriod.shortForecast) return;
+        const forecastText = forecastPeriod.shortForecast.toLowerCase();
+        let selectedIcon = "default_icon.png";
+        for (let key in customIconMapping) {
+          if (forecastText.includes(key)) {
+            selectedIcon = customIconMapping[key];
+            break;
+          }
+        }
+        const iconImgEl = document.getElementById(iconElementId);
+        if (iconImgEl) {
+          iconImgEl.src = selectedIcon;
+        }
+      };
+
+      function updateForecast(lat, lon) {
+        fetch(`https://api.weather.gov/points/${lat},${lon}`)
+          .then(response => {
+            if (!response.ok) throw new Error("Error fetching point data.");
+            return response.json();
+          })
+          .then(data => {
+            const forecastUrl = data.properties.forecast;
+            return fetch(forecastUrl);
+          })
+          .then(response => {
+            if (!response.ok) throw new Error("Error fetching forecast data.");
+            return response.json();
+          })
+          .then(forecastData => {
+            const periods = forecastData.properties.periods;
+            if (periods.length >= 13) {
+              // Update 7 high temperature boxes (temp-0 .. temp-6)
+              for (let i = 0; i < 7; i++) {
+                const highTemp = periods[2 * i].temperature;
+                const tempEl = document.getElementById('temp-' + i);
+                if (tempEl) { tempEl.textContent = highTemp; }
+              }
+              // Update 6 low temperature boxes (temp-7 .. temp-12)
+              for (let i = 0; i < 6; i++) {
+                const lowTemp = periods[2 * i + 1].temperature;
+                const tempEl = document.getElementById('temp-' + (i + 7));
+                if (tempEl) { tempEl.textContent = lowTemp; }
+              }
+              // Update forecast icons for 7 days
+              for (let i = 0; i < 7; i++) {
+                let forecastPeriod = periods[2 * i];
+                let iconId = "icon-" + i + "-img";
+                updateWeatherIcon(forecastPeriod, iconId);
+              }
+            }
+          })
+          .catch(error => {
+            console.error("Error with NWS API:", error);
+          });
+      }
+
+      // Set up city dropdown events.
+      document.querySelectorAll("#city-dropdown li").forEach(item => {
+        item.addEventListener("click", function() {
+          const cityName = this.textContent.trim().toUpperCase();
+          const displayText = cityName + ", OH";
+          document.getElementById("header-text").textContent = displayText;
+          const lat = parseFloat(this.getAttribute("data-lat"));
+          const lon = parseFloat(this.getAttribute("data-lon"));
+          updateForecast(lat, lon);
+        });
+      });
+
+      // Set initial forecast.
+      updateForecast(39.1031, -84.5120);
+      document.getElementById("header-text").textContent = "CINCINNATI, OH";
+
+      // --- Draggable Markers & Locked Elements ---
+      const tooltip = document.getElementById('customTooltip');
+      const daysArr = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+      let today = new Date().getDay();
+      const overrideSavedPositions = true;
+
+      // Updated createLockedElement now applies the textShadow property.
+      function createLockedElement(id, text, top, left, styles) {
+        const div = document.createElement('div');
+        div.classList.add('locked');
+        div.setAttribute('id', id);
+        div.setAttribute('contenteditable', 'true');
+        div.textContent = text;
+        if (id.startsWith("temp-")) {
+          div.classList.add('temperature');
+          div.dataset.type = 'temperature';
+          div.addEventListener("click", () => { overrideTemperature(div); });
+        } else {
+          div.dataset.type = 'day';
+        }
+        div.addEventListener("mouseenter", showTooltip);
+        div.addEventListener("mousemove", showTooltip);
+        div.addEventListener("mouseleave", hideTooltip);
+        let savedPosition = null;
+        if (!overrideSavedPositions) {
+          savedPosition = JSON.parse(localStorage.getItem(id));
+        }
+        if (savedPosition) {
+          div.style.top = savedPosition.top;
+          div.style.left = savedPosition.left;
+        } else {
+          div.style.top = top;
+          div.style.left = left;
+        }
+        Object.assign(div.style, {
+          fontFamily: styles.font,
+          fontSize: styles.size,
+          color: styles.color,
+          width: styles.width,
+          height: styles.height,
+          textShadow: styles.textShadow || "",
+          position: "absolute"
+        });
+        if (div.dataset.type === 'day' && (text.trim() === "SAT" || text.trim() === "SUN")) {
+          div.style.color = "yellow";
+        }
+        container.appendChild(div);
+      }
+
+      // Define marker positions as percentages (based on the displayed image dimensions).
+      const temperatureBoxPositions = [
+        { top: "62.4566%", left: "10.4728%" },
+        { top: "62.4566%", left: "22.4455%" },
+        { top: "62.4566%", left: "34.1878%" },
+        { top: "62.4566%", left: "45.7788%" },
+        { top: "62.4566%", left: "57.5529%" },
+        { top: "62.4566%", left: "69.3978%" },
+        { top: "62.4566%", left: "81.0498%" },
+        { top: "74.579%", left: "16.202%" },
+        { top: "74.579%", left: "27.8947%" },
+        { top: "74.579%", left: "39.6916%" },
+        { top: "74.579%", left: "51.4274%" },
+        { top: "74.579%", left: "63.0998%" },
+        { top: "74.579%", left: "74.8722%" }
+      ];
+
+      const dayBoxPositions = [
+        { top: "27.963%", left: "10.625%" },
+        { top: "27.963%", left: "22.3983%" },
+        { top: "27.963%", left: "34.1919%" },
+        { top: "27.963%", left: "45.8285%" },
+        { top: "27.963%", left: "57.6042%" },
+        { top: "27.963%", left: "69.3237%" },
+        { top: "27.963%", left: "81.0156%" }
+      ];
+
+      // Create temperature boxes with text glow.
+      for (let i = 0; i < temperatureBoxPositions.length; i++) {
+        const pos = temperatureBoxPositions[i];
+        createLockedElement(
+          `temp-${i}`,
+          "temp" + i,
+          pos.top,
+          pos.left,
+          { 
+            font: "Overpass Black", 
+            size: "5.75em", 
+            color: "#FFFFFF", 
+            width: "160px", 
+            height: "70px", 
+            textShadow: "5px 0 10px #000, 5px 0 10px #000" 
+          }
+        );
+      }
+
+      // Create day boxes with text glow.
+      for (let i = 0; i < dayBoxPositions.length; i++) {
+        let dayIndex = (today + i) % 7;
+        const pos = dayBoxPositions[i];
+        createLockedElement(
+          `day-${i}`,
+          daysArr[dayIndex],
+          pos.top,
+          pos.left,
+          { 
+            font: "Overpass Black", 
+            size: "5.0em", 
+            color: "#FFFFFF", 
+            width: "160px", 
+            height: "70px",
+            textShadow: "5px 0 10px #000, 5px 0 10px #000" 
+          }
+        );
+      }
+
+      function overrideTemperature(box) {
+        const newTemp = prompt("Enter new temperature:", box.textContent);
+        if (newTemp !== null) {
+          box.textContent = newTemp;
+        }
+      }
+
+      function showTooltip(e) {
+        tooltip.textContent = `Top: ${e.currentTarget.style.top}, Left: ${e.currentTarget.style.left}`;
+        tooltip.style.display = "block";
+        tooltip.style.top = (e.clientY + 10) + "px";
+        tooltip.style.left = (e.clientX + 10) + "px";
+      }
+      function hideTooltip(e) {
+        tooltip.style.display = "none";
+      }
+
+      // Make elements draggable; convert mouse movement into percentage positions relative to the overlay.
+      function makeDraggable(item, id) {
+        let wasDragged = false;
+        item.addEventListener('click', function(e) {
+          if (wasDragged) {
+            e.stopPropagation();
+            e.preventDefault();
+            wasDragged = false;
+          }
+        });
+        item.onmousedown = function(event) {
+          if (event.target.closest('select')) return;
+          event.preventDefault();
+          const containerRect = container.getBoundingClientRect();
+          const startRect = item.getBoundingClientRect();
+          let shiftX = event.clientX - startRect.left;
+          let shiftY = event.clientY - startRect.top;
+
+          function moveAt(pageX, pageY) {
+            let newX = pageX - shiftX - containerRect.left;
+            let newY = pageY - shiftY - containerRect.top;
+            newX = Math.max(0, Math.min(containerRect.width - item.offsetWidth, newX));
+            newY = Math.max(0, Math.min(containerRect.height - item.offsetHeight, newY));
+            let newXPercent = (newX / containerRect.width) * 100;
+            let newYPercent = (newY / containerRect.height) * 100;
+            item.style.left = newXPercent + '%';
+            item.style.top = newYPercent + '%';
+            tooltip.style.top = (pageY + 10) + "px";
+            tooltip.style.left = (pageX + 10) + "px";
+            tooltip.textContent = `Top: ${item.style.top}, Left: ${item.style.left}`;
+          }
+          function onMouseMove(e) {
+            moveAt(e.pageX, e.pageY);
+          }
+          document.addEventListener('mousemove', onMouseMove);
+          item.onmouseup = function() {
+            document.removeEventListener('mousemove', onMouseMove);
+            item.onmouseup = null;
+            wasDragged = true;
+            localStorage.setItem(id, JSON.stringify({
+              top: item.style.top,
+              left: item.style.left
+            }));
+          };
+        };
+        item.ondragstart = function() { return false; };
+      }
+
+      const iconBoxPositions = [
+        { top: "35.6901%", left: "11.5861%" },
+        { top: "35.6901%", left: "23.5132%" },
+        { top: "35.6901%", left: "35.179%" },
+        { top: "35.6901%", left: "46.9507%" },
+        { top: "35.6901%", left: "58.6165%" },
+        { top: "35.6901%", left: "70.179%" },
+        { top: "35.6901%", left: "82.159%" }
+      ];
+      const iconFilenames = [
+        'sunny.png', 'cloudy.png', 'rain.png', 'thunderstorm.png', 'snow.png',
+        'foggy.png', 'windy.png', 'haze.png', 'partly-cloudy.png', 'hot.png',
+        'hot-and-cloudy.png', 'sunshine-and-rain.png', 'severe.png',
+        'heavy-rain.png', 'heavy-snow.png', 'snow-showers.png', 'wintry-mix.png',
+        'drizzle.png', 'mostly-cloudy.png', 'freezing-rain.png', 'windy.png'
+      ];
+
+      function createDraggableIconBox(id, top, left) {
+        const box = document.createElement('div');
+        box.classList.add('icon-box', 'draggable');
+        box.setAttribute('id', id);
+        box.style.top = top;
+        box.style.left = left;
+        box.addEventListener("mouseenter", showTooltip);
+        box.addEventListener("mousemove", showTooltip);
+        box.addEventListener("mouseleave", hideTooltip);
+        const img = document.createElement('img');
+        img.setAttribute('src', iconFilenames[0]);
+        img.setAttribute('alt', 'Weather Icon');
+        img.setAttribute('id', id + '-img');
+        box.appendChild(img);
+        const select = document.createElement('select');
+        iconFilenames.forEach(filename => {
+          const option = document.createElement('option');
+          option.value = filename;
+          option.textContent = filename;
+          select.appendChild(option);
+        });
+        select.addEventListener('mousedown', function(e) {
+          e.stopPropagation();
+        });
+        select.addEventListener('change', function() {
+          img.setAttribute('src', this.value);
+        });
+        box.appendChild(select);
+        container.appendChild(box);
+        makeDraggable(box, id);
+      }
+
+      for (let i = 0; i < iconBoxPositions.length; i++) {
+        const pos = iconBoxPositions[i];
+        createDraggableIconBox('icon-' + i, pos.top, pos.left);
+      }
+
+      // Enable dragging for all locked elements.
+      document.querySelectorAll('.locked').forEach(el => {
+        makeDraggable(el, el.id);
+      });
+    </script>
+  </div>
+  <!-- Password Overlay -->
+  <div id="passwordOverlay">
+    <div id="passwordBox">
+      <h2>Please Enter Password</h2>
+      <input type="password" id="passwordInput" placeholder="Password" />
+      <br/>
+      <button id="passwordSubmit">Submit</button>
+      <p id="passwordError" style="color:red; display:none;">Incorrect Password</p>
+    </div>
+  </div>
+  <script>
+    // When the correct password is entered, remove the blur and hide the overlay.
+    document.getElementById('passwordSubmit').addEventListener('click', function() {
+      const passwordInput = document.getElementById('passwordInput');
+      const passwordError = document.getElementById('passwordError');
+      if (passwordInput.value === "Belpark#2025!") {
+        document.getElementById('mainContent').style.filter = "none";
+        document.getElementById('passwordOverlay').style.display = "none";
+      } else {
+        passwordError.style.display = "block";
+      }
+    });
+    // Allow pressing the Enter key to submit.
+    document.getElementById('passwordInput').addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        document.getElementById('passwordSubmit').click();
+      }
+    });
+  </script>
+</body>
+</html>
