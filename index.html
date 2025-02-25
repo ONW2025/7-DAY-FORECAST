@@ -618,12 +618,13 @@
       document.getElementById("header-text").textContent = "CINCINNATI, OH";
 
       // --- Draggable Markers & Locked Elements ---
+
       const tooltip = document.getElementById('customTooltip');
       const daysArr = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
       let today = new Date().getDay();
       const overrideSavedPositions = true;
 
-      // Updated createLockedElement now applies the textShadow property.
+      // Modify createLockedElement to return the created element
       function createLockedElement(id, text, top, left, styles) {
         const div = document.createElement('div');
         div.classList.add('locked');
@@ -664,9 +665,10 @@
           div.style.color = "yellow";
         }
         container.appendChild(div);
+        return div; // <-- Return the element so we can update it later.
       }
 
-      // Define marker positions as percentages (based on the displayed image dimensions).
+      // Define marker positions as percentages.
       const temperatureBoxPositions = [
         { top: "62.4566%", left: "10.4728%" },
         { top: "62.4566%", left: "22.4455%" },
@@ -693,7 +695,7 @@
         { top: "27.963%", left: "81.0156%" }
       ];
 
-      // Create temperature boxes with text glow.
+      // Create temperature boxes.
       for (let i = 0; i < temperatureBoxPositions.length; i++) {
         const pos = temperatureBoxPositions[i];
         createLockedElement(
@@ -712,11 +714,15 @@
         );
       }
 
-      // Create day boxes with text glow.
+      // --- New Code for Advancing Days ---
+      // Use a global offset so you can shift all days at once.
+      let dayOffset = 0;
+      const baseDay = today; // store the initial day from new Date().getDay()
+      const dayBoxElements = [];
       for (let i = 0; i < dayBoxPositions.length; i++) {
-        let dayIndex = (today + i) % 7;
+        let dayIndex = (baseDay + dayOffset + i) % 7;
         const pos = dayBoxPositions[i];
-        createLockedElement(
+        const dayBox = createLockedElement(
           `day-${i}`,
           daysArr[dayIndex],
           pos.top,
@@ -730,7 +736,57 @@
             textShadow: "5px 0 10px #000, 5px 0 10px #000" 
           }
         );
+        dayBoxElements.push(dayBox);
       }
+
+      // Function to update day boxes based on the current offset.
+      function updateDayBoxes() {
+        for (let i = 0; i < dayBoxElements.length; i++) {
+          let dayIndex = (baseDay + dayOffset + i) % 7;
+          dayBoxElements[i].textContent = daysArr[dayIndex];
+          // Style weekends in yellow.
+          if (daysArr[dayIndex] === "SAT" || daysArr[dayIndex] === "SUN") {
+            dayBoxElements[i].style.color = "yellow";
+          } else {
+            dayBoxElements[i].style.color = "#FFFFFF";
+          }
+        }
+      }
+
+      // Add a hover box on the first day to allow advancing all days.
+      const firstDayElement = document.getElementById('day-0');
+      // Ensure the first day container is relatively positioned.
+      firstDayElement.style.position = 'relative';
+      const advanceBox = document.createElement('div');
+      advanceBox.style.position = 'absolute';
+      advanceBox.style.top = '0';
+      advanceBox.style.right = '0';
+      advanceBox.style.background = 'rgba(0, 0, 0, 0.8)';
+      advanceBox.style.color = '#fff';
+      advanceBox.style.padding = '5px';
+      advanceBox.style.borderRadius = '4px';
+      advanceBox.style.cursor = 'pointer';
+      advanceBox.style.fontSize = '0.5em';
+      advanceBox.textContent = 'Advance Days';
+      advanceBox.style.display = 'none';
+      firstDayElement.appendChild(advanceBox);
+
+      firstDayElement.addEventListener('mouseenter', function() {
+        advanceBox.style.display = 'block';
+      });
+      firstDayElement.addEventListener('mouseleave', function() {
+        advanceBox.style.display = 'none';
+      });
+
+      advanceBox.addEventListener('click', function(e) {
+        e.stopPropagation();
+        dayOffset = (dayOffset + 1) % 7;
+        updateDayBoxes();
+      });
+
+      // -----------------------------
+      // End New Code for Advancing Days
+      // -----------------------------
 
       function overrideTemperature(box) {
         const newTemp = prompt("Enter new temperature:", box.textContent);
